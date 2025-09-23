@@ -8,6 +8,11 @@ import {
   stopTone, 
   updateToneParameters 
 } from '../utils/audioEngine';
+import { 
+  getConfigFromUrl, 
+  updateUrlWithConfig, 
+  clearUrlConfig 
+} from '../utils/urlConfig';
 
 export const useAudioEngine = () => {
   const [audioContext, setAudioContext] = useState(null);
@@ -16,10 +21,17 @@ export const useAudioEngine = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const tonesRef = useRef([]);
 
-  // Initialize audio context
+  // Initialize audio context and load configuration from URL
   useEffect(() => {
     const context = createAudioContext();
     setAudioContext(context);
+    
+    // Load configuration from URL if present
+    const urlConfig = getConfigFromUrl();
+    if (urlConfig) {
+      setTones(urlConfig.tones);
+      setMasterVolume(urlConfig.masterVolume);
+    }
   }, []);
 
   // Create a new tone with default settings
@@ -98,7 +110,7 @@ export const useAudioEngine = () => {
     }
   };
 
-  // Update live parameters
+  // Update live parameters and auto-save to URL
   useEffect(() => {
     if (isPlaying) {
       tonesRef.current.forEach(activeTone => {
@@ -110,6 +122,46 @@ export const useAudioEngine = () => {
     }
   }, [tones, isPlaying]);
 
+  // Auto-save configuration to URL when tones or master volume changes
+  useEffect(() => {
+    if (tones.length > 0) {
+      updateUrlWithConfig(tones, masterVolume);
+    }
+  }, [tones, masterVolume]);
+
+  // Load configuration from encoded string
+  const loadConfiguration = (tones, masterVolume) => {
+    // Stop current playback if active
+    if (isPlaying) {
+      tonesRef.current.forEach(stopTone);
+      tonesRef.current = [];
+      setIsPlaying(false);
+    }
+    
+    setTones(tones);
+    setMasterVolume(masterVolume);
+  };
+
+  // Save current configuration to URL
+  const saveToUrl = () => {
+    const url = updateUrlWithConfig(tones, masterVolume);
+    return url;
+  };
+
+  // Clear configuration and reset URL
+  const clearConfiguration = () => {
+    // Stop current playback if active
+    if (isPlaying) {
+      tonesRef.current.forEach(stopTone);
+      tonesRef.current = [];
+      setIsPlaying(false);
+    }
+    
+    setTones([]);
+    setMasterVolume(0.3);
+    clearUrlConfig();
+  };
+
   return {
     tones,
     masterVolume,
@@ -118,6 +170,9 @@ export const useAudioEngine = () => {
     removeTone,
     updateTone,
     togglePlayback,
-    setMasterVolume
+    setMasterVolume,
+    loadConfiguration,
+    saveToUrl,
+    clearConfiguration
   };
 };
