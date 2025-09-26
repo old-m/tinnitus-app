@@ -40,12 +40,14 @@ export default function ConfigurationControls({
   const handleLoadFromUrl = () => {
     try {
       const url = new URL(loadUrl);
-      const config = url.searchParams.get('config');
-      if (config) {
+      const hasConfig = url.searchParams.has('mv') || 
+                       Array.from(url.searchParams.keys()).some(key => key.startsWith('t'));
+      
+      if (hasConfig) {
         // Navigate to the URL to load the configuration
         window.location.href = loadUrl;
       } else {
-        alert('No configuration found in the provided URL');
+        alert('No tinnitus configuration found in the provided URL');
       }
     } catch (err) {
       alert('Invalid URL format');

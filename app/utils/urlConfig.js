@@ -1,59 +1,77 @@
 // URL query string utilities for saving and loading tone configurations
 
 export const encodeToneConfig = (tones, masterVolume) => {
-  const config = {
-    masterVolume,
-    tones: tones.map(tone => ({
-      frequency: tone.frequency,
-      volume: tone.volume,
-      waveform: tone.waveform,
-      toneType: tone.toneType,
-      chirpRange: tone.chirpRange,
-      chirpSpeed: tone.chirpSpeed,
-      fluctuationIntensity: tone.fluctuationIntensity,
-      pan: tone.pan
-    }))
-  };
+  // Use individual query parameters for each setting
+  const params = new URLSearchParams();
   
-  // Compress the configuration into a base64 encoded string
-  const jsonString = JSON.stringify(config);
-  return btoa(jsonString);
-};
-
-export const decodeToneConfig = (encodedConfig) => {
-  try {
-    const jsonString = atob(encodedConfig);
-    const config = JSON.parse(jsonString);
+  // Add master volume
+  params.set('mv', masterVolume.toString());
+  
+  // Add each tone as separate parameters
+  tones.forEach((tone, index) => {
+    const prefix = `t${index}`;
+    params.set(`${prefix}_freq`, tone.frequency.toString());
+    params.set(`${prefix}_vol`, tone.volume.toString());
+    params.set(`${prefix}_wave`, tone.waveform);
+    params.set(`${prefix}_type`, tone.toneType);
     
-    // Validate the configuration structure
-    if (!config || typeof config.masterVolume !== 'number' || !Array.isArray(config.tones)) {
-      throw new Error('Invalid configuration structure');
+    if (tone.toneType === 'chirp') {
+      params.set(`${prefix}_range`, tone.chirpRange.toString());
+      params.set(`${prefix}_speed`, tone.chirpSpeed.toString());
+      params.set(`${prefix}_fluct`, tone.fluctuationIntensity.toString());
     }
     
-    // Add unique IDs to the tones
-    const tonesWithIds = config.tones.map((tone, index) => ({
-      id: Date.now() + index,
-      frequency: Math.max(20, Math.min(20000, tone.frequency || 440)),
-      volume: Math.max(0, Math.min(1, tone.volume || 0.5)),
-      waveform: ['sine', 'square', 'sawtooth', 'triangle'].includes(tone.waveform) ? tone.waveform : 'sine',
-      toneType: ['static', 'chirp'].includes(tone.toneType) ? tone.toneType : 'static',
-      chirpRange: Math.max(50, Math.min(2000, tone.chirpRange || 500)),
-      chirpSpeed: Math.max(0.1, Math.min(10, tone.chirpSpeed || 2)),
-      fluctuationIntensity: Math.max(0, Math.min(1, tone.fluctuationIntensity || 0.3)),
-      pan: Math.max(-1, Math.min(1, tone.pan || 0)),
-      oscillator: null,
-      gainNode: null,
-      panNode: null,
-      modulatorOsc: null,
-      modulatorGain: null,
-      volumeModulator: null,
-      volumeModGain: null,
-      isActive: false
-    }));
+    if (tone.pan !== 0) {
+      params.set(`${prefix}_pan`, tone.pan.toString());
+    }
+  });
+  
+  return params.toString();
+};
+
+export const decodeToneConfig = (queryString) => {
+  try {
+    const params = new URLSearchParams(queryString);
+    
+    // Get master volume
+    const masterVolume = Math.max(0, Math.min(1, parseFloat(params.get('mv')) || 0.3));
+    
+    // Extract tones
+    const tones = [];
+    let toneIndex = 0;
+    
+    while (params.has(`t${toneIndex}_freq`)) {
+      const prefix = `t${toneIndex}`;
+      
+      const tone = {
+        id: Date.now() + toneIndex,
+        frequency: Math.max(20, Math.min(20000, parseInt(params.get(`${prefix}_freq`)) || 440)),
+        volume: Math.max(0, Math.min(1, parseFloat(params.get(`${prefix}_vol`)) || 0.5)),
+        waveform: ['sine', 'square', 'sawtooth', 'triangle'].includes(params.get(`${prefix}_wave`)) 
+          ? params.get(`${prefix}_wave`) : 'sine',
+        toneType: ['static', 'chirp'].includes(params.get(`${prefix}_type`)) 
+          ? params.get(`${prefix}_type`) : 'static',
+        chirpRange: Math.max(50, Math.min(2000, parseInt(params.get(`${prefix}_range`)) || 500)),
+        chirpSpeed: Math.max(0.1, Math.min(10, parseFloat(params.get(`${prefix}_speed`)) || 2)),
+        fluctuationIntensity: Math.max(0, Math.min(1, parseFloat(params.get(`${prefix}_fluct`)) || 0.3)),
+        pan: Math.max(-1, Math.min(1, parseFloat(params.get(`${prefix}_pan`)) || 0)),
+        oscillator: null,
+        gainNode: null,
+        panNode: null,
+        modulatorOsc: null,
+        modulatorGain: null,
+        volumeModulator: null,
+        volumeModGain: null,
+        isActive: false
+      };
+      
+      tones.push(tone);
+      toneIndex++;
+    }
     
     return {
-      masterVolume: Math.max(0, Math.min(1, config.masterVolume)),
-      tones: tonesWithIds
+      masterVolume,
+      tones
     };
   } catch (error) {
     console.error('Failed to decode tone configuration:', error);
@@ -70,9 +88,24 @@ export const getCurrentUrl = () => {
 
 export const updateUrlWithConfig = (tones, masterVolume) => {
   if (typeof window !== 'undefined') {
-    const encodedConfig = encodeToneConfig(tones, masterVolume);
+    const queryString = encodeToneConfig(tones, masterVolume);
     const url = new URL(window.location);
-    url.searchParams.set('config', encodedConfig);
+    
+    // Clear existing tone parameters
+    const keysToDelete = [];
+    url.searchParams.forEach((value, key) => {
+      if (key === 'mv' || key.startsWith('t')) {
+        keysToDelete.push(key);
+      }
+    });
+    keysToDelete.forEach(key => url.searchParams.delete(key));
+    
+    // Add new parameters
+    const newParams = new URLSearchParams(queryString);
+    newParams.forEach((value, key) => {
+      url.searchParams.set(key, value);
+    });
+    
     window.history.replaceState({}, '', url);
     return url.toString();
   }
@@ -81,10 +114,9 @@ export const updateUrlWithConfig = (tones, masterVolume) => {
 
 export const getConfigFromUrl = () => {
   if (typeof window !== 'undefined') {
-    const urlParams = new URLSearchParams(window.location.search);
-    const config = urlParams.get('config');
-    if (config) {
-      return decodeToneConfig(config);
+    const queryString = window.location.search.substring(1);
+    if (queryString) {
+      return decodeToneConfig(queryString);
     }
   }
   return null;
@@ -93,7 +125,16 @@ export const getConfigFromUrl = () => {
 export const clearUrlConfig = () => {
   if (typeof window !== 'undefined') {
     const url = new URL(window.location);
-    url.searchParams.delete('config');
+    
+    // Clear all tone-related parameters
+    const keysToDelete = [];
+    url.searchParams.forEach((value, key) => {
+      if (key === 'mv' || key.startsWith('t')) {
+        keysToDelete.push(key);
+      }
+    });
+    keysToDelete.forEach(key => url.searchParams.delete(key));
+    
     window.history.replaceState({}, '', url);
   }
 };

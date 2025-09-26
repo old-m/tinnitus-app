@@ -110,17 +110,49 @@ export const useAudioEngine = () => {
     }
   };
 
-  // Update live parameters and auto-save to URL
+  // Update live parameters and handle waveform changes
   useEffect(() => {
     if (isPlaying) {
+      let needsRestart = false;
+      
       tonesRef.current.forEach(activeTone => {
         const toneConfig = tones.find(t => t.id === activeTone.id);
         if (toneConfig) {
-          updateToneParameters(activeTone, toneConfig);
+          // Check if waveform or tone type has changed - these require a restart
+          if (activeTone.oscillator.type !== toneConfig.waveform || 
+              activeTone.toneType !== toneConfig.toneType) {
+            needsRestart = true;
+          } else {
+            updateToneParameters(activeTone, toneConfig);
+          }
         }
       });
+      
+      // If any tone needs a waveform change, restart all audio
+      if (needsRestart) {
+        // Stop current tones
+        tonesRef.current.forEach(stopTone);
+        tonesRef.current = [];
+        
+        // Restart with new configuration
+        const masterGain = audioContext.createGain();
+        masterGain.gain.value = masterVolume;
+        masterGain.connect(audioContext.destination);
+
+        tones.forEach(toneConfig => {
+          let activeTone;
+          
+          if (toneConfig.toneType === 'chirp') {
+            activeTone = createChirpTone(audioContext, toneConfig, masterGain);
+          } else {
+            activeTone = createStaticTone(audioContext, toneConfig, masterGain);
+          }
+
+          tonesRef.current.push(activeTone);
+        });
+      }
     }
-  }, [tones, isPlaying]);
+  }, [tones, isPlaying, audioContext, masterVolume]);
 
   // Auto-save configuration to URL when tones or master volume changes
   useEffect(() => {
