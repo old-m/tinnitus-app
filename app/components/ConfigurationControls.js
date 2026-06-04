@@ -88,28 +88,6 @@ export default function ConfigurationControls({
             🗑️ Clear All
           </button>
         </div>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Paste a configuration URL here..."
-            value={loadUrl}
-            onChange={(e) => setLoadUrl(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded w-64 text-sm"
-          />
-          <button
-            onClick={handleLoadFromUrl}
-            disabled={!loadUrl.trim()}
-            className={`px-4 py-2 rounded font-medium transition-colors ${
-              loadUrl.trim()
-                ? 'bg-green-500 text-white hover:bg-green-600'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-            title="Load configuration from URL"
-          >
-            📥 Load
-          </button>
-        </div>
       </div>
 
       {/* Share Modal */}
